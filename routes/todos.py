@@ -6,6 +6,8 @@ from db import SessionLocal
 from models import Todos
 from starlette import status
 from pydantic import BaseModel, Field
+from .auth import get_current_user
+
 
 router = APIRouter()
 
@@ -18,6 +20,7 @@ def get_db():
 
 
 db_dependency = Annotated[Session, Depends(get_db)]
+user_dependency = Annotated[dict, Depends(get_current_user)]
 
 
 class TodoRequest(BaseModel):
@@ -28,14 +31,17 @@ class TodoRequest(BaseModel):
 
 
 @router.get('/', status_code=status.HTTP_200_OK)
-async def read_all_todos(db: db_dependency):
-    todos = db.scalars(select(Todos)).all()
+async def read_all_todos(user: user_dependency, db: db_dependency):
+    todos = db.scalars(select(Todos).where(Todos.owner_id == user.get('id'))).all()
     return todos
 
 
 @router.get('/{id}', status_code=status.HTTP_200_OK)
-async def read_todo_by_id(db: db_dependency, id: Annotated[int, Path(gt=0)]):
-    todo = db.scalar(select(Todos).where(Todos.id == id))
+async def read_todo_by_id(user: user_dependency, db: db_dependency, id: Annotated[int, Path(gt=0)]):
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Unauthorized')
+
+    todo = db.scalar(select(Todos).where(Todos.id == id).filter(Todos.owner_id == user.get('id')))
     
     if todo is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Todo not found')
@@ -44,15 +50,21 @@ async def read_todo_by_id(db: db_dependency, id: Annotated[int, Path(gt=0)]):
 
 
 @router.post('/create', status_code=status.HTTP_201_CREATED)
-async def create_todo(db: db_dependency, todo_request: TodoRequest):
-    todo = Todos(**todo_request.model_dump())
+async def create_todo(user: user_dependency, db: db_dependency, todo_request: TodoRequest):
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Unauthorized')
+
+    todo = Todos(**todo_request.model_dump(), owner_id = user.get('id'))
     db.add(todo)
     db.commit()
 
 
 @router.put('/update/{id}', status_code=status.HTTP_204_NO_CONTENT)
-async def update_todo(db: db_dependency, id: Annotated[int, Path(gt=0)], todo_request: TodoRequest):
-    todo = db.scalar(select(Todos).where(Todos.id == id))
+async def update_todo(user: user_dependency, db: db_dependency, id: Annotated[int, Path(gt=0)], todo_request: TodoRequest):
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Unauthorized')
+
+    todo = db.scalar(select(Todos).where(Todos.id == id).filter(Todos.owner_id == user.get('id')))
 
     if todo is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Todo not found')
@@ -67,8 +79,11 @@ async def update_todo(db: db_dependency, id: Annotated[int, Path(gt=0)], todo_re
 
 
 @router.delete('/delete/{id}', status_code=status.HTTP_204_NO_CONTENT)
-async def delete_todo(db: db_dependency, id: Annotated[int, Path(gt=0)]):
-    todo = db.scalar(select(Todos).where(Todos.id == id))
+async def delete_todo(user: user_dependency, db: db_dependency, id: Annotated[int, Path(gt=0)]):
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Unauthorized')
+
+    todo = db.scalar(select(Todos).where(Todos.id == id).filter(Todos.owner_id == user.get('id')))
 
     if todo is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Todo not found')

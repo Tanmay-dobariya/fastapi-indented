@@ -42,7 +42,7 @@ def get_db():
 db_dependency = Annotated[Session, Depends(get_db)]
 
 
-@router.post('/create', status_code=status.HTTP_201_CREATED)
+@router.post('/register', status_code=status.HTTP_201_CREATED)
 async def create_user(create_user_request: CreateUserRequest, db: db_dependency):
     create_user_model = User(
         email = create_user_request.email,
@@ -58,7 +58,7 @@ async def create_user(create_user_request: CreateUserRequest, db: db_dependency)
     db.commit()
 
 
-def authenticate_user(username: str, password: str):
+def authenticate_user(username: str, password: str, db: db_dependency):
     existing_user = db.scalar(select(User).where(User.username == username))
 
     if existing_user is None:
@@ -69,8 +69,8 @@ def authenticate_user(username: str, password: str):
     
     return existing_user
 
-def create_token(username: str, user_id: str, expires_delta = timedelta):
-    encode = {'sub': username, 'id': user_id}
+def create_token(username: str, user_id: str, role: str, expires_delta = timedelta):
+    encode = {'sub': username, 'id': user_id, 'role': role}
     expires = datetime.now(timezone.utc) + expires_delta
     encode.update({'exp': expires})
     return jwt.encode(encode, SECRET_KEY, algorithm=ALGORITHM)
@@ -80,19 +80,20 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_bearer)]):
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get('sub')
         user_id: str = payload.get('id')
+        user_role: str = payload.get('role')
 
-        if username is None or user_id is None:
+        if username is None or user_id is None or user_role is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid token')
     except JWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid token')
         
 @router.post('/login', status_code=status.HTTP_200_OK, response_model=Token)
 async def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()], db: db_dependency):
-    user = authenticate_user(form_data.username, form_data.password)
+    user = authenticate_user(form_data.username, form_data.password, db)
 
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid username or password')
 
-    token = create_token(form_data.username, user.id, timedelta(minutes=30))
+    token = create_token(form_data.username, user.id, user.role, timedelta(minutes=30))
 
     return {'access_token': token, 'token_type': 'bearer'}

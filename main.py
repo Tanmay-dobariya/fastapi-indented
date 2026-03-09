@@ -6,5 +6,6 @@ from routes import auth, todos
 app = FastAPI()
 app.include_router(auth.router, prefix='/auth', tags=['auth'])
 app.include_router(todos.router, prefix='/todos', tags=['todo'])
+app.include_router(admin.router, prefix='/admin', tags=['admin'])
 
 Base.metadata.create_all(bind=engine)
