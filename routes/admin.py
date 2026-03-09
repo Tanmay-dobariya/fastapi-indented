@@ -5,7 +5,6 @@ from fastapi import Depends, HTTPException, Path, APIRouter
 from db import SessionLocal
 from models import Todos
 from starlette import status
-from pydantic import BaseModel, Field
 from .auth import get_current_user
 
 
