@@ -2,7 +2,7 @@ from jose import JWTError
 from datetime import timedelta, datetime, timezone
 from typing import Annotated
 from db import SessionLocal
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from starlette import status
 from models import User
@@ -15,6 +15,7 @@ from jose import jwt
 
 router = APIRouter()
 bcrypt_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+oauth2_bearer = OAuth2PasswordBearer(tokenUrl='auth/login')
 SECRET_KEY = '8f1077cd0f5b347ddfa389c27406c8d7094e3a59fb4bded6a91725fbd42f5c75' # This is just a demo one you can generate your own
 ALGORITHM = 'HS256'
 
